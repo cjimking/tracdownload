@@ -784,12 +784,6 @@ class DownloadsApi(Component):
                         self.delete_type(type_id)
 
     def _add_download(self, context, download, file):
-        # Check for file name uniqueness.
-        if self.unique_filename:
-            if self.get_download_by_file(download['file']):
-                raise TracError("File with same name is already uploaded "
-                                "and unique file names are enabled.")
-
         # Check correct file type.
         name, ext = os.path.splitext(download['file'])
         if not (ext[1:].lower() in self.ext) and not ('all' in self.ext):
@@ -800,11 +794,20 @@ class DownloadsApi(Component):
             raise TracError("Maximum file size: %s bytes" % self.max_size,
                             "Upload failed")
 
-        # Add new download to DB.
-        self.add_download(download)
+        # Check for file name uniqueness.
+        if self.unique_filename:
+            old_download = self.get_download_by_file(download['file'])
+            self.edit_download(old_download['id'], download)
+            download['id'] = old_download['id']
+#            if self.get_download_by_file(download['file']):
+#                raise TracError("File with same name is already uploaded "
+#                                "and unique file names are enabled.")
+        else:
+            # Add new download to DB.
+            self.add_download(download)
 
-        # Get inserted download by time to get its ID.
-        download = self.get_download_by_time(download['time'])
+            # Get inserted download by time to get its ID.
+            download = self.get_download_by_time(download['time'])
 
         # Prepare file paths.
         path = os.path.normpath(os.path.join(self.path,
@@ -816,7 +819,8 @@ class DownloadsApi(Component):
 
         # Store uploaded image.
         try:
-            os.mkdir(path.encode('utf-8'))
+            if not os.path.exists(path.encode('utf-8')):
+                os.mkdir(path.encode('utf-8'))
             with open(filepath.encode('utf-8'), 'wb+') as fileobj:
                 file.seek(0)
                 shutil.copyfileobj(file, fileobj)
